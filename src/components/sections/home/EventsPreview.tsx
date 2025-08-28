@@ -1,8 +1,19 @@
+import { ReactNode, useRef, useEffect, useState, useCallback } from 'react';
 import { motion, Variants } from 'framer-motion';
 import { Calendar, Clock, Users, Zap, Brain } from 'lucide-react';
 import SectionWrapper from '@/components/SectionWrapper';
 import SectionCTA from '@/components/sectionCTA';
-import { ReactNode } from 'react';
+
+interface Particle {
+  x: number;
+  y: number;
+  size: number;
+  speedX: number;
+  speedY: number;
+  opacity: number;
+  color: string;
+  pulse: number;
+}
 
 interface EventItem {
   id: number;
@@ -22,6 +33,10 @@ interface EventItem {
 // Remove unused interface
 
 export default function EventsPreview() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [particles, setParticles] = useState<Particle[]>([]);
+  const [hoveredEvent, setHoveredEvent] = useState<number | null>(null);
+
   const events: EventItem[] = [
     {
       id: 1,
@@ -95,8 +110,93 @@ export default function EventsPreview() {
     }
   }
 
+  // Particle animation
+  const initParticles = useCallback((canvas: HTMLCanvasElement | null, count: number = 20): Particle[] => {
+    const colors = ['rgba(59, 130, 246, 0.5)', 'rgba(99, 102, 241, 0.5)', 'rgba(139, 92, 246, 0.5)'];
+    const width = canvas?.width || (typeof window !== 'undefined' ? window.innerWidth : 0);
+    const height = canvas?.height || (typeof window !== 'undefined' ? window.innerHeight : 0);
+    
+    return Array.from({ length: count }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      size: Math.random() * 3 + 1,
+      speedX: (Math.random() - 0.5) * 0.5,
+      speedY: (Math.random() - 0.5) * 0.5,
+      opacity: Math.random() * 0.5 + 0.1,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      pulse: Math.random() * 2 * Math.PI
+    }));
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Set canvas size
+    const resizeCanvas = () => {
+      if (!canvas) return;
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    
+    // Initialize particles
+    const particles = initParticles(canvas);
+    
+    // Animation loop
+    let animationFrameId: number;
+    let lastTime = performance.now();
+    
+    const animate = (time: number) => {
+      if (!canvas || !ctx) return;
+      
+      const deltaTime = time - lastTime;
+      lastTime = time;
+      
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Update and draw particles
+      for (const p of particles) {
+        // Update position
+        p.x += p.speedX * (deltaTime / 16); // Normalize to 60fps
+        p.y += p.speedY * (deltaTime / 16);
+        p.pulse += 0.01;
+        
+        // Bounce off edges
+        if (p.x < 0 || p.x > canvas.width) p.speedX *= -1;
+        if (p.y < 0 || p.y > canvas.height) p.speedY *= -1;
+        
+        // Draw particle
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.opacity * (0.8 + Math.sin(p.pulse) * 0.2);
+        ctx.fill();
+      }
+      
+      animationFrameId = requestAnimationFrame(animate);
+    };
+    
+    // Initial setup
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    animationFrameId = requestAnimationFrame(animate);
+    
+    // Cleanup
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', resizeCanvas);
+    };
+  }, []);
+
   return (
     <div className="relative">
+      <canvas 
+        ref={canvasRef} 
+        className="fixed top-0 left-0 w-full h-full pointer-events-none z-0"
+      />
       {/* Background decorative elements */}
       <div className="absolute inset-0 -z-10 overflow-hidden">
         <motion.div 
@@ -246,7 +346,15 @@ export default function EventsPreview() {
               />
               
               {/* Main card */}
-              <div className="relative p-6 bg-card/90 backdrop-blur-sm rounded-xl border border-border hover:border-transparent shadow-sm hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 h-full">
+              <div 
+                className="relative p-6 bg-card/90 backdrop-blur-sm rounded-xl border border-border hover:border-transparent shadow-sm hover:shadow-lg hover:shadow-primary/10 transition-all duration-300 h-full"
+                onMouseEnter={() => setHoveredEvent(event.id)}
+                onMouseLeave={() => setHoveredEvent(null)}
+                onClick={() => {
+                  // Handle click event if needed
+                  console.log('Event clicked:', event.id);
+                }}
+              >
                 
                 {/* Animated border gradient */}
                 <motion.div
